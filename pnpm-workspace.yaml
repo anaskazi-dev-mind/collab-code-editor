@@ -5,5 +5,5 @@
 # apps/* and packages/* contain installable packages. Everything else
 # in the repo (docs/, infrastructure/, .github/) is intentionally excluded.
 packages:
-  - "apps/*"
-  - "packages/*"
+  - 'apps/*'
+  - 'packages/*'

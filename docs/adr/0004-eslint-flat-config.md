@@ -9,7 +9,7 @@
 
 ## 1. High-Level System Architecture
 
-The system is built as a **modular monolith with two intentionally separated deployables**, not a full microservices mesh. This is a deliberate trade-off, explained in Section 11 — premature microservices add operational cost without demonstrating extra engineering skill, but the one boundary that *must* be separate (untrusted code execution) is separated for security reasons.
+The system is built as a **modular monolith with two intentionally separated deployables**, not a full microservices mesh. This is a deliberate trade-off, explained in Section 11 — premature microservices add operational cost without demonstrating extra engineering skill, but the one boundary that _must_ be separate (untrusted code execution) is separated for security reasons.
 
 ```
                                    ┌────────────────────┐
@@ -48,6 +48,7 @@ The system is built as a **modular monolith with two intentionally separated dep
 ```
 
 **Key architectural properties:**
+
 - Any API instance can serve any client — no sticky sessions required. Cross-instance real-time fan-out is handled via **Redis pub/sub**, not in-memory state.
 - The **execution worker** is a separate deployable with a separate trust boundary. It never shares a process, container, or host filesystem with the API layer.
 - PostgreSQL is the single source of truth for durable state (users, rooms, CRDT snapshots, execution history). Redis holds only ephemeral/derived state — losing Redis should degrade the system, not corrupt it.
@@ -56,27 +57,27 @@ The system is built as a **modular monolith with two intentionally separated dep
 
 ## 2. Technology Choices & Justification
 
-| Concern | Choice | Why |
-|---|---|---|
-| Language | TypeScript everywhere | End-to-end type safety, shared DTOs between FE/BE via a shared package. |
-| Frontend framework | React + Vite | Fast dev loop, huge ecosystem, standard expectation at target companies. |
-| Editor component | Monaco Editor (`y-monaco` binding) | Same engine as VS Code — instantly recognizable to interviewers; mature Yjs binding exists. CodeMirror 6 is lighter and has a more native Yjs binding (`y-codemirror.next`) and is noted as a valid alternative if bundle size becomes a concern. |
-| Client state | Zustand | Minimal boilerplate vs Redux; Yjs itself is the source of truth for document state, Zustand only holds UI/session state — avoids duplicating state ownership. |
-| CRDT engine | **Yjs** | See ADR-0002 in Section 11. Decentralized sync, no central transform server, mature ecosystem (`y-websocket`, `y-indexeddb`, `y-monaco`, awareness protocol for presence). |
-| Backend framework | Fastify | Lower overhead than Express, built-in JSON schema validation, plugin/encapsulation model that naturally supports clean architecture and DI. |
-| WS transport | Raw `ws` + Yjs sync/awareness protocols, custom multiplexed envelope | Full control over the wire protocol; a stronger engineering story than wrapping Socket.IO. Socket.IO noted as a simpler fallback trade-off. |
-| DI container | Awilix | Lightweight, explicit registration, no decorators/reflection metadata required (unlike tsyringe/InversifyJS) — keeps the codebase readable. |
-| ORM | Prisma | Type-safe queries, migrations, strong DX. Raw SQL via `$queryRaw` reserved for hot paths if profiling demands it. |
-| Validation | Zod | Shared schemas between frontend and backend (`packages/shared-schemas`), single source of truth for input shape. |
-| Database | PostgreSQL | Relational integrity for users/rooms/membership; `bytea` columns for Yjs binary snapshots; strong tooling. |
-| Cache/pub-sub/queue backend | Redis | One infrastructure primitive serving four distinct roles (Section 9) — deliberate reuse, not four separate systems. |
-| Job queue | BullMQ | Redis-backed, supports retries, concurrency control, delayed jobs, and dashboards — needed for execution job backpressure. |
-| Code execution sandbox | Docker (ephemeral containers, cgroup + seccomp + no-network) | Reasonable isolation bar for v1; documented upgrade path to gVisor/Firecracker (Section 11). |
-| Auth | JWT (access + rotating refresh tokens) + optional OAuth (GitHub/Google) | Stateless access tokens for scale; rotation + reuse detection for refresh tokens gives revocation without full session-store lookups on every request. |
-| Monorepo tooling | pnpm workspaces + Turborepo | Shared packages, incremental/cached builds across `apps/*`. |
-| Testing | Vitest/Jest, Supertest, Playwright, custom CRDT convergence tests | Layered pyramid; convergence tests are a differentiator most portfolio projects skip. |
-| Logging | Pino | Structured JSON logs, low overhead, production-standard. |
-| Local infra | Docker Compose | Full stack (`postgres`, `redis`, `api`, `execution-worker`, `web`) runnable with one command on Windows/VS Code. |
+| Concern                     | Choice                                                                  | Why                                                                                                                                                                                                                                               |
+| --------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Language                    | TypeScript everywhere                                                   | End-to-end type safety, shared DTOs between FE/BE via a shared package.                                                                                                                                                                           |
+| Frontend framework          | React + Vite                                                            | Fast dev loop, huge ecosystem, standard expectation at target companies.                                                                                                                                                                          |
+| Editor component            | Monaco Editor (`y-monaco` binding)                                      | Same engine as VS Code — instantly recognizable to interviewers; mature Yjs binding exists. CodeMirror 6 is lighter and has a more native Yjs binding (`y-codemirror.next`) and is noted as a valid alternative if bundle size becomes a concern. |
+| Client state                | Zustand                                                                 | Minimal boilerplate vs Redux; Yjs itself is the source of truth for document state, Zustand only holds UI/session state — avoids duplicating state ownership.                                                                                     |
+| CRDT engine                 | **Yjs**                                                                 | See ADR-0002 in Section 11. Decentralized sync, no central transform server, mature ecosystem (`y-websocket`, `y-indexeddb`, `y-monaco`, awareness protocol for presence).                                                                        |
+| Backend framework           | Fastify                                                                 | Lower overhead than Express, built-in JSON schema validation, plugin/encapsulation model that naturally supports clean architecture and DI.                                                                                                       |
+| WS transport                | Raw `ws` + Yjs sync/awareness protocols, custom multiplexed envelope    | Full control over the wire protocol; a stronger engineering story than wrapping Socket.IO. Socket.IO noted as a simpler fallback trade-off.                                                                                                       |
+| DI container                | Awilix                                                                  | Lightweight, explicit registration, no decorators/reflection metadata required (unlike tsyringe/InversifyJS) — keeps the codebase readable.                                                                                                       |
+| ORM                         | Prisma                                                                  | Type-safe queries, migrations, strong DX. Raw SQL via `$queryRaw` reserved for hot paths if profiling demands it.                                                                                                                                 |
+| Validation                  | Zod                                                                     | Shared schemas between frontend and backend (`packages/shared-schemas`), single source of truth for input shape.                                                                                                                                  |
+| Database                    | PostgreSQL                                                              | Relational integrity for users/rooms/membership; `bytea` columns for Yjs binary snapshots; strong tooling.                                                                                                                                        |
+| Cache/pub-sub/queue backend | Redis                                                                   | One infrastructure primitive serving four distinct roles (Section 9) — deliberate reuse, not four separate systems.                                                                                                                               |
+| Job queue                   | BullMQ                                                                  | Redis-backed, supports retries, concurrency control, delayed jobs, and dashboards — needed for execution job backpressure.                                                                                                                        |
+| Code execution sandbox      | Docker (ephemeral containers, cgroup + seccomp + no-network)            | Reasonable isolation bar for v1; documented upgrade path to gVisor/Firecracker (Section 11).                                                                                                                                                      |
+| Auth                        | JWT (access + rotating refresh tokens) + optional OAuth (GitHub/Google) | Stateless access tokens for scale; rotation + reuse detection for refresh tokens gives revocation without full session-store lookups on every request.                                                                                            |
+| Monorepo tooling            | pnpm workspaces + Turborepo                                             | Shared packages, incremental/cached builds across `apps/*`.                                                                                                                                                                                       |
+| Testing                     | Vitest/Jest, Supertest, Playwright, custom CRDT convergence tests       | Layered pyramid; convergence tests are a differentiator most portfolio projects skip.                                                                                                                                                             |
+| Logging                     | Pino                                                                    | Structured JSON logs, low overhead, production-standard.                                                                                                                                                                                          |
+| Local infra                 | Docker Compose                                                          | Full stack (`postgres`, `redis`, `api`, `execution-worker`, `web`) runnable with one command on Windows/VS Code.                                                                                                                                  |
 
 ---
 
@@ -244,37 +245,37 @@ collab-code-editor/
 
 ## 4. Folder Responsibilities
 
-| Path | Responsibility |
-|---|---|
-| `apps/web` | All UI. No business logic beyond presentation/orchestration — auth rules, RBAC checks, and execution constraints are enforced server-side and only mirrored client-side for UX. |
-| `apps/api` | REST + WebSocket gateway. Owns auth, room/document CRUD, RBAC enforcement, CRDT persistence, job submission. Structured as **controller → service → repository** per module (Separation of Concerns). |
-| `apps/api/src/modules/*` | Each module is a bounded context, internally structured for Clean Architecture: `controllers/` (request/response shaping) → `services/` (business logic) → `repositories/` (data access) → `interfaces/` (ports the services depend on, enabling Dependency Inversion) → `dto/`, `schemas/`, `types/` (module-local contracts and validation) → `tests/`. `*.routes.ts` stays at the module root as the single entrypoint. Wiring between a service and its concrete repository happens via `core/container.ts`. |
-| `apps/api/src/websocket` | Everything related to the real-time transport: connection auth, Yjs sync/awareness handling, and the Redis-based fan-out adapter that lets any instance broadcast to any client. |
-| `apps/api/src/observability` | Reserved placeholder for metrics, tracing, and health/readiness checks (Phase 8). Present in the structure now so modules can later depend on its interfaces without a restructure; deliberately unimplemented until Phase 8. |
-| `apps/api/src/core` | Cross-cutting infrastructure-agnostic concerns: config loading/validation, logging, DI container, error hierarchy. |
-| `apps/api/src/infrastructure` | Concrete adapters to external systems (Postgres via Prisma, Redis, BullMQ). Swappable behind interfaces — this is where SOLID's Dependency Inversion Principle is enforced in practice. |
-| `apps/execution-worker` | Consumes execution jobs from the queue and runs them inside locked-down, ephemeral Docker containers. Deliberately has **no** access to the primary database beyond writing job results, and no access to user session/auth internals. |
-| `packages/shared-contracts` | Single source of truth for cross-app **communication contracts**: REST request/response DTOs, WebSocket event payload shapes (the type-`2` JSON events from Section 6), shared enums (roles, job statuses), and command/event payloads. Both `apps/api` and `apps/web` import from here — this is what prevents FE/BE drift. |
-| `packages/shared-types` | Generic, communication-agnostic TypeScript utility types used across apps (e.g. `Result<T, E>`, `Paginated<T>`, branded ID types) — not tied to any specific API/WS contract. |
-| `packages/shared-schemas` | Zod runtime-validation schemas imported by both API (server-side validation) and web (form validation), kept aligned with the shapes defined in `shared-contracts` — DRY validation logic. |
-| `infrastructure/docker` | All environment compositions. Dev, and prod differ only in build target and env injection, not in service topology. |
-| `docs/adr` | Every non-trivial decision gets a short ADR: context, decision, consequences. This is what "frozen unless justified" means in practice. |
+| Path                          | Responsibility                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/web`                    | All UI. No business logic beyond presentation/orchestration — auth rules, RBAC checks, and execution constraints are enforced server-side and only mirrored client-side for UX.                                                                                                                                                                                                                                                                                                                                  |
+| `apps/api`                    | REST + WebSocket gateway. Owns auth, room/document CRUD, RBAC enforcement, CRDT persistence, job submission. Structured as **controller → service → repository** per module (Separation of Concerns).                                                                                                                                                                                                                                                                                                            |
+| `apps/api/src/modules/*`      | Each module is a bounded context, internally structured for Clean Architecture: `controllers/` (request/response shaping) → `services/` (business logic) → `repositories/` (data access) → `interfaces/` (ports the services depend on, enabling Dependency Inversion) → `dto/`, `schemas/`, `types/` (module-local contracts and validation) → `tests/`. `*.routes.ts` stays at the module root as the single entrypoint. Wiring between a service and its concrete repository happens via `core/container.ts`. |
+| `apps/api/src/websocket`      | Everything related to the real-time transport: connection auth, Yjs sync/awareness handling, and the Redis-based fan-out adapter that lets any instance broadcast to any client.                                                                                                                                                                                                                                                                                                                                 |
+| `apps/api/src/observability`  | Reserved placeholder for metrics, tracing, and health/readiness checks (Phase 8). Present in the structure now so modules can later depend on its interfaces without a restructure; deliberately unimplemented until Phase 8.                                                                                                                                                                                                                                                                                    |
+| `apps/api/src/core`           | Cross-cutting infrastructure-agnostic concerns: config loading/validation, logging, DI container, error hierarchy.                                                                                                                                                                                                                                                                                                                                                                                               |
+| `apps/api/src/infrastructure` | Concrete adapters to external systems (Postgres via Prisma, Redis, BullMQ). Swappable behind interfaces — this is where SOLID's Dependency Inversion Principle is enforced in practice.                                                                                                                                                                                                                                                                                                                          |
+| `apps/execution-worker`       | Consumes execution jobs from the queue and runs them inside locked-down, ephemeral Docker containers. Deliberately has **no** access to the primary database beyond writing job results, and no access to user session/auth internals.                                                                                                                                                                                                                                                                           |
+| `packages/shared-contracts`   | Single source of truth for cross-app **communication contracts**: REST request/response DTOs, WebSocket event payload shapes (the type-`2` JSON events from Section 6), shared enums (roles, job statuses), and command/event payloads. Both `apps/api` and `apps/web` import from here — this is what prevents FE/BE drift.                                                                                                                                                                                     |
+| `packages/shared-types`       | Generic, communication-agnostic TypeScript utility types used across apps (e.g. `Result<T, E>`, `Paginated<T>`, branded ID types) — not tied to any specific API/WS contract.                                                                                                                                                                                                                                                                                                                                    |
+| `packages/shared-schemas`     | Zod runtime-validation schemas imported by both API (server-side validation) and web (form validation), kept aligned with the shapes defined in `shared-contracts` — DRY validation logic.                                                                                                                                                                                                                                                                                                                       |
+| `infrastructure/docker`       | All environment compositions. Dev, and prod differ only in build target and env injection, not in service topology.                                                                                                                                                                                                                                                                                                                                                                                              |
+| `docs/adr`                    | Every non-trivial decision gets a short ADR: context, decision, consequences. This is what "frozen unless justified" means in practice.                                                                                                                                                                                                                                                                                                                                                                          |
 
 ---
 
 ## 5. Database Schema Overview (PostgreSQL)
 
-| Table | Purpose | Key columns |
-|---|---|---|
-| `users` | Account records | `id`, `email` (unique), `password_hash` (nullable if OAuth-only), `name`, `avatar_url`, `oauth_provider`, `oauth_id`, `created_at`, `updated_at` |
-| `refresh_tokens` | Rotating refresh tokens for revocation/reuse-detection | `id`, `user_id` (FK), `token_hash`, `expires_at`, `revoked_at`, `created_at` |
-| `rooms` | A collaborative session container | `id`, `name`, `slug` (unique), `owner_id` (FK → users), `default_language`, `is_public`, `created_at`, `updated_at`, `archived_at` |
-| `room_members` | Membership + RBAC role | `id`, `room_id` (FK), `user_id` (FK), `role` (`owner` \| `editor` \| `viewer`), `joined_at`. Unique constraint on `(room_id, user_id)`. |
-| `documents` | A file within a room (rooms can hold multiple files) | `id`, `room_id` (FK), `title`, `path`, `created_at`, `updated_at` |
-| `document_snapshots` | Periodic compacted Yjs state | `id`, `document_id` (FK), `state_vector` (`bytea`), `snapshot` (`bytea`), `version`, `created_at` |
-| `document_updates` | Append-only Yjs update log since the last snapshot | `id`, `document_id` (FK), `update` (`bytea`), `client_id`, `created_at` |
-| `execution_jobs` | Code execution history | `id`, `room_id` (FK), `user_id` (FK), `document_id` (FK), `language`, `status` (`queued`\|`running`\|`completed`\|`failed`\|`timeout`), `stdin`, `stdout`, `stderr`, `exit_code`, `started_at`, `completed_at`, `duration_ms` |
-| `audit_logs` | Security/ops trail | `id`, `actor_id` (FK), `action`, `resource_type`, `resource_id`, `metadata` (`jsonb`), `created_at` |
+| Table                | Purpose                                                | Key columns                                                                                                                                                                                                                   |
+| -------------------- | ------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `users`              | Account records                                        | `id`, `email` (unique), `password_hash` (nullable if OAuth-only), `name`, `avatar_url`, `oauth_provider`, `oauth_id`, `created_at`, `updated_at`                                                                              |
+| `refresh_tokens`     | Rotating refresh tokens for revocation/reuse-detection | `id`, `user_id` (FK), `token_hash`, `expires_at`, `revoked_at`, `created_at`                                                                                                                                                  |
+| `rooms`              | A collaborative session container                      | `id`, `name`, `slug` (unique), `owner_id` (FK → users), `default_language`, `is_public`, `created_at`, `updated_at`, `archived_at`                                                                                            |
+| `room_members`       | Membership + RBAC role                                 | `id`, `room_id` (FK), `user_id` (FK), `role` (`owner` \| `editor` \| `viewer`), `joined_at`. Unique constraint on `(room_id, user_id)`.                                                                                       |
+| `documents`          | A file within a room (rooms can hold multiple files)   | `id`, `room_id` (FK), `title`, `path`, `created_at`, `updated_at`                                                                                                                                                             |
+| `document_snapshots` | Periodic compacted Yjs state                           | `id`, `document_id` (FK), `state_vector` (`bytea`), `snapshot` (`bytea`), `version`, `created_at`                                                                                                                             |
+| `document_updates`   | Append-only Yjs update log since the last snapshot     | `id`, `document_id` (FK), `update` (`bytea`), `client_id`, `created_at`                                                                                                                                                       |
+| `execution_jobs`     | Code execution history                                 | `id`, `room_id` (FK), `user_id` (FK), `document_id` (FK), `language`, `status` (`queued`\|`running`\|`completed`\|`failed`\|`timeout`), `stdin`, `stdout`, `stderr`, `exit_code`, `started_at`, `completed_at`, `duration_ms` |
+| `audit_logs`         | Security/ops trail                                     | `id`, `actor_id` (FK), `action`, `resource_type`, `resource_id`, `metadata` (`jsonb`), `created_at`                                                                                                                           |
 
 **Relationships:** `users` 1—N `rooms` (owner); `rooms` N—N `users` via `room_members`; `rooms` 1—N `documents`; `documents` 1—N `document_snapshots` / `document_updates`; `rooms` 1—N `execution_jobs`.
 
@@ -288,24 +289,24 @@ collab-code-editor/
 
 **Transport:** one WebSocket connection per client per room (`/ws/rooms/:roomId`), authenticated at handshake time. A single connection carries three kinds of messages, distinguished by a leading type byte in the frame (mirroring the pattern used by `y-websocket`, extended with a third type):
 
-| Type tag | Payload | Purpose |
-|---|---|---|
-| `0` | Binary — Yjs sync protocol (`sync-step-1`, `sync-step-2`, `update`) | Document content synchronization |
-| `1` | Binary — Yjs awareness protocol | Live cursors, selections, user color/name (ephemeral, never persisted) |
-| `2` | JSON — application events | Room lifecycle, execution status, notifications |
+| Type tag | Payload                                                             | Purpose                                                                |
+| -------- | ------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| `0`      | Binary — Yjs sync protocol (`sync-step-1`, `sync-step-2`, `update`) | Document content synchronization                                       |
+| `1`      | Binary — Yjs awareness protocol                                     | Live cursors, selections, user color/name (ephemeral, never persisted) |
+| `2`      | JSON — application events                                           | Room lifecycle, execution status, notifications                        |
 
 **Application-level event taxonomy (type `2`):**
 
-| Event | Direction | Purpose |
-|---|---|---|
-| `room:join` / `room:leave` | client → server | Explicit membership signaling on top of the raw connection |
-| `room:user-joined` / `room:user-left` | server → clients | Broadcast membership changes |
-| `room:members-update` | server → clients | Full member list refresh (roles, online status) |
-| `execution:submit` | client → server | Request a code run (also available as REST `POST /rooms/:id/execute`) |
-| `execution:queued` / `execution:started` | server → clients | Job lifecycle status |
-| `execution:output` | server → clients | Streamed stdout/stderr chunks |
-| `execution:completed` / `execution:failed` | server → clients | Final result |
-| `error` | server → client | Structured error envelope (code, message) |
+| Event                                      | Direction        | Purpose                                                               |
+| ------------------------------------------ | ---------------- | --------------------------------------------------------------------- |
+| `room:join` / `room:leave`                 | client → server  | Explicit membership signaling on top of the raw connection            |
+| `room:user-joined` / `room:user-left`      | server → clients | Broadcast membership changes                                          |
+| `room:members-update`                      | server → clients | Full member list refresh (roles, online status)                       |
+| `execution:submit`                         | client → server  | Request a code run (also available as REST `POST /rooms/:id/execute`) |
+| `execution:queued` / `execution:started`   | server → clients | Job lifecycle status                                                  |
+| `execution:output`                         | server → clients | Streamed stdout/stderr chunks                                         |
+| `execution:completed` / `execution:failed` | server → clients | Final result                                                          |
+| `error`                                    | server → client  | Structured error envelope (code, message)                             |
 
 **Contract ownership:** the concrete TypeScript payload shapes for every type-`2` application event (and the Yjs-adjacent envelope typing) are defined once in `packages/shared-contracts` and imported by both `apps/api` and `apps/web` — the server and client can never silently drift on what an event looks like.
 
@@ -316,6 +317,7 @@ collab-code-editor/
 ## 7. Docker Execution Architecture
 
 **Flow:**
+
 1. Client sends `execution:submit` (or REST) with `language`, `code`, `stdin`.
 2. API validates: language allow-list, code size cap, per-user/per-room rate limit (Redis-backed). Creates an `execution_jobs` row (`status=queued`) and enqueues a BullMQ job.
 3. The **execution-worker** service (separate deployable) picks the job up.
@@ -330,7 +332,7 @@ collab-code-editor/
    - stdout/stderr captured with a hard byte cap (prevents log-bomb style resource abuse)
 5. Worker writes the result back to `execution_jobs` and publishes the result on the room's Redis channel so the owning API instance can forward it to the client over the existing WS connection.
 
-**Isolation boundary:** the execution worker runs on infrastructure separated from the API/DB (separate host or VM), and its access to the Docker daemon is the *only* privileged capability it holds — it has no database credentials beyond a narrow write path for job results, and no access to auth internals.
+**Isolation boundary:** the execution worker runs on infrastructure separated from the API/DB (separate host or VM), and its access to the Docker daemon is the _only_ privileged capability it holds — it has no database credentials beyond a narrow write path for job results, and no access to auth internals.
 
 **Documented trade-off:** cgroups + seccomp + no-network is a reasonable isolation bar for a portfolio project, but it is **not** kernel-level isolation. The architecture explicitly earmarks **gVisor, Kata Containers, or Firecracker microVMs** (the approach used by AWS Lambda and CodeSandbox) as the production-grade next step — see ADR-0003. Building that from day one would be over-engineering for this project's actual risk profile (YAGNI), but knowing the gap and naming the upgrade path is itself the senior-engineering signal.
 
@@ -358,48 +360,49 @@ Redis is used deliberately for **four distinct roles** on one infrastructure pri
 3. **Ephemeral presence cache** — `presence:{roomId}:{userId}` keys with short TTLs, refreshed on heartbeat; gives presence continuity across reconnects/instance restarts without ever touching Postgres.
 4. **Rate limiting & revocation cache** — sliding-window counters for auth/execution endpoints, and a fast revoked-token lookup to avoid a DB hit on every request.
 
-**Design rule:** Redis never holds anything that is the *only* copy of truth. If Redis is flushed, the system degrades (presence resets, rate limits reset) but no user data is lost — durable state always lives in PostgreSQL.
+**Design rule:** Redis never holds anything that is the _only_ copy of truth. If Redis is flushed, the system degrades (presence resets, rate limits reset) but no user data is lost — durable state always lives in PostgreSQL.
 
 ---
 
 ## 10. Development Roadmap
 
-| Phase | Focus |
-|---|---|
-| 0 | Monorepo scaffold (pnpm + Turborepo), shared tsconfig/eslint/prettier, CI skeleton, `docker-compose` with Postgres + Redis only, this architecture doc committed. |
-| 1 | Auth & user foundation: schema, Fastify skeleton, DI container, register/login/refresh/logout, password hashing, JWT issuance, unit + integration tests. |
-| 2 | Rooms & persistence foundation: rooms/room_members/documents schema, REST CRUD, RBAC middleware, React app shell + auth pages + room list/create UI. |
-| 3 | Real-time collaboration core: WS server, Yjs sync integration, awareness/presence, Monaco+Yjs binding on the frontend — single-instance collaborative editing working end to end. |
-| 4 | CRDT persistence: snapshot/update tables, compaction strategy, reconnect/resync logic. |
-| 5 | Horizontal scaling of the WS layer: Redis pub/sub adapter, multi-instance local verification via `docker-compose --scale`. |
-| 6 | Secure code execution: execution_jobs schema, BullMQ queue, execution-worker service, Docker sandboxing, submit/stream/result flow, frontend execution panel. |
-| 7 | Presence polish: live cursors with user colors, selection highlighting, avatar list, typing indicators, connection-status UX. |
-| 8 | Production hardening: implement the reserved `apps/api/src/observability/` layer (metrics, tracing, health/readiness probes), structured logging, centralized error taxonomy, rate limiting everywhere, security headers, CORS policy, secrets management. |
-| 9 | Testing & quality: coverage targets, CRDT convergence test suite, E2E flows via Playwright, WS load testing (k6/Artillery). |
-| 10 | Deployment & DevOps: multi-stage production Dockerfiles, `docker-compose.prod`, CI/CD (GitHub Actions), deployment target, monitoring. |
-| 11 | Interview presentation polish: architecture diagrams, ADRs, demo recording, "how would you scale this to 1M users" write-up, documented trade-offs, seed/demo mode. |
+| Phase | Focus                                                                                                                                                                                                                                                      |
+| ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0     | Monorepo scaffold (pnpm + Turborepo), shared tsconfig/eslint/prettier, CI skeleton, `docker-compose` with Postgres + Redis only, this architecture doc committed.                                                                                          |
+| 1     | Auth & user foundation: schema, Fastify skeleton, DI container, register/login/refresh/logout, password hashing, JWT issuance, unit + integration tests.                                                                                                   |
+| 2     | Rooms & persistence foundation: rooms/room_members/documents schema, REST CRUD, RBAC middleware, React app shell + auth pages + room list/create UI.                                                                                                       |
+| 3     | Real-time collaboration core: WS server, Yjs sync integration, awareness/presence, Monaco+Yjs binding on the frontend — single-instance collaborative editing working end to end.                                                                          |
+| 4     | CRDT persistence: snapshot/update tables, compaction strategy, reconnect/resync logic.                                                                                                                                                                     |
+| 5     | Horizontal scaling of the WS layer: Redis pub/sub adapter, multi-instance local verification via `docker-compose --scale`.                                                                                                                                 |
+| 6     | Secure code execution: execution_jobs schema, BullMQ queue, execution-worker service, Docker sandboxing, submit/stream/result flow, frontend execution panel.                                                                                              |
+| 7     | Presence polish: live cursors with user colors, selection highlighting, avatar list, typing indicators, connection-status UX.                                                                                                                              |
+| 8     | Production hardening: implement the reserved `apps/api/src/observability/` layer (metrics, tracing, health/readiness probes), structured logging, centralized error taxonomy, rate limiting everywhere, security headers, CORS policy, secrets management. |
+| 9     | Testing & quality: coverage targets, CRDT convergence test suite, E2E flows via Playwright, WS load testing (k6/Artillery).                                                                                                                                |
+| 10    | Deployment & DevOps: multi-stage production Dockerfiles, `docker-compose.prod`, CI/CD (GitHub Actions), deployment target, monitoring.                                                                                                                     |
+| 11    | Interview presentation polish: architecture diagrams, ADRs, demo recording, "how would you scale this to 1M users" write-up, documented trade-offs, seed/demo mode.                                                                                        |
 
 ---
 
 ## 11. Key Architectural Decisions & Trade-offs
 
-- **Modular monolith + one separated deployable, not full microservices.** A team of one building a portfolio project gets more credit for correctly *not* over-engineering than for a service mesh nobody asked for. The one boundary drawn — code execution — is drawn for a real security reason, not for resume-driven design. *(ADR-0001)*
-- **Yjs over Operational Transformation.** CRDTs need no central sequencing/transform authority, are simpler to reason about under network partitions, and have a mature ecosystem (`y-websocket`, `y-indexeddb`, `y-monaco`, awareness protocol). Trade-off: Yjs documents accumulate tombstone metadata over a long lifetime — mitigated with the snapshot/compaction strategy in Section 5. *(ADR-0002)*
-- **Docker + cgroups/seccomp/no-network, not Firecracker, for v1 execution isolation.** Strong enough isolation to demonstrate real security awareness, without building a microVM platform for a project whose actual threat exposure doesn't yet justify it. The gap is named explicitly rather than hidden. *(ADR-0003)*
+- **Modular monolith + one separated deployable, not full microservices.** A team of one building a portfolio project gets more credit for correctly _not_ over-engineering than for a service mesh nobody asked for. The one boundary drawn — code execution — is drawn for a real security reason, not for resume-driven design. _(ADR-0001)_
+- **Yjs over Operational Transformation.** CRDTs need no central sequencing/transform authority, are simpler to reason about under network partitions, and have a mature ecosystem (`y-websocket`, `y-indexeddb`, `y-monaco`, awareness protocol). Trade-off: Yjs documents accumulate tombstone metadata over a long lifetime — mitigated with the snapshot/compaction strategy in Section 5. _(ADR-0002)_
+- **Docker + cgroups/seccomp/no-network, not Firecracker, for v1 execution isolation.** Strong enough isolation to demonstrate real security awareness, without building a microVM platform for a project whose actual threat exposure doesn't yet justify it. The gap is named explicitly rather than hidden. _(ADR-0003)_
 - **Prisma over raw SQL by default.** Optimizes for velocity and type safety; the escape hatch (`$queryRaw`) is documented for the rare hot path that needs it, rather than pre-optimizing everywhere.
 - **Fastify over Express.** Schema validation and plugin encapsulation are built in, which pairs naturally with the DI/clean-architecture goals — at the (accepted) cost of a smaller ecosystem than Express.
 - **Single multiplexed WS connection over separate connections/namespaces.** Fewer connections to authenticate and manage per client, at the cost of implementing a small framing protocol — a deliberate, demonstrable piece of systems design rather than an off-the-shelf abstraction.
 - **Presence lives in Yjs awareness + Redis relay, never in Postgres.** Presence is inherently ephemeral; persisting it would be scope creep with no product value (YAGNI). Redis is a relay, not a store of record.
 - **Refresh-token rotation with reuse detection**, rather than plain long-lived refresh tokens — a small addition that meaningfully raises the security bar and is a strong interview talking point.
-- **`shared-contracts` split out from `shared-types` / `shared-schemas`.** Keeps three concerns from blurring: *what* the wire contract looks like (`shared-contracts`), *how* it's validated at runtime (`shared-schemas`), and *generic* helper types with no communication semantics (`shared-types`). Avoids the common anti-pattern where a single "shared types" package quietly becomes a dumping ground for everything.
+- **`shared-contracts` split out from `shared-types` / `shared-schemas`.** Keeps three concerns from blurring: _what_ the wire contract looks like (`shared-contracts`), _how_ it's validated at runtime (`shared-schemas`), and _generic_ helper types with no communication semantics (`shared-types`). Avoids the common anti-pattern where a single "shared types" package quietly becomes a dumping ground for everything.
 - **Per-module `interfaces/` folders inside `apps/api`.** Makes Dependency Inversion physically visible in the tree rather than implied by convention — a service imports from its own module's `interfaces/`, never directly from another module's `repositories/`. This keeps module boundaries enforced by folder structure, not just discipline, and costs nothing at this scale (a handful of extra folders per module).
-- **`apps/api/src/observability/` reserved but empty.** Naming the folder now avoids a later restructure once metrics/tracing/health are actually implemented in Phase 8, without pulling forward the work itself (YAGNI still applies to the *implementation*, not to the *placeholder*).
+- **`apps/api/src/observability/` reserved but empty.** Naming the folder now avoids a later restructure once metrics/tracing/health are actually implemented in Phase 8, without pulling forward the work itself (YAGNI still applies to the _implementation_, not to the _placeholder_).
 
 ---
 
 ## 12. Freeze Notice — FINAL
 
 This is the final, approved architecture. Relative to the first draft, exactly three refinements were incorporated:
+
 1. `packages/shared-contracts` added as the dedicated home for cross-app communication contracts (DTOs, WS event payloads, shared enums, command/event payloads), with `shared-types` and `shared-schemas` scoped down to avoid overlap.
 2. Every `apps/api/src/modules/*` module restructured into `controllers/`, `services/`, `repositories/`, `interfaces/`, `dto/`, `schemas/`, `types/`, `tests/` for explicit Clean Architecture layering and visible Dependency Inversion.
 3. `apps/api/src/observability/{metrics,tracing,health}` reserved as an architectural placeholder for Phase 8 — structure only, no implementation.
