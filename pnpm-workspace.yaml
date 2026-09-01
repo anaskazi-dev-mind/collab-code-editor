@@ -1,0 +1,9 @@
+# yaml-language-server: $schema=https://json.schemastore.org/pnpm-workspace.yaml
+
+# Declares which folders are pnpm workspace packages.
+# Per the frozen architecture (docs/architecture.md, Section 3), only
+# apps/* and packages/* contain installable packages. Everything else
+# in the repo (docs/, infrastructure/, .github/) is intentionally excluded.
+packages:
+  - "apps/*"
+  - "packages/*"

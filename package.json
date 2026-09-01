@@ -1,0 +1,28 @@
+{
+  "name": "collab-code-editor",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Production-grade real-time collaborative code editor — CRDT-based (Yjs) multi-user editing, live presence, and sandboxed Docker code execution.",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20.11.0",
+    "pnpm": ">=11.0.0"
+  },
+  "packageManager": "pnpm@11.25.0+sha512.5cde925b4f075f725eb71fbae18a42ffe784524789f19b61c731cb8721ec28aaee160e01a8d5af4fedb2a42cdbf300efe23db356b0d4a17b4d63e11f8ab7c956",
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "lint": "turbo run lint",
+    "lint:fix": "turbo run lint -- --fix",
+    "test": "turbo run test",
+    "typecheck": "turbo run typecheck",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "devDependencies": {
+    "turbo": "2.10.12",
+    "typescript": "6.0.3",
+    "prettier": "3.9.6",
+    "@types/node": "22.20.1"
+  }
+}
