@@ -1,0 +1,46 @@
+// Prisma schema for the collaborative code editor's API.
+// See docs/architecture.md, Section 5, for the full database design.
+//
+// Scope note: only the Phase 1 (Auth & user foundation) models are defined
+// here -- User and RefreshToken. Rooms, documents, execution jobs, and audit
+// logs are added incrementally via their own migrations in later phases,
+// per docs/architecture.md, Section 10 (Development Roadmap).
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id            String   @id @default(uuid(7))
+  email         String   @unique
+  passwordHash  String?  @map("password_hash")
+  name          String?
+  avatarUrl     String?  @map("avatar_url")
+  oauthProvider String?  @map("oauth_provider")
+  oauthId       String?  @map("oauth_id")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  refreshTokens RefreshToken[]
+
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String    @id @default(uuid(7))
+  userId    String    @map("user_id")
+  tokenHash String    @map("token_hash")
+  expiresAt DateTime  @map("expires_at")
+  revokedAt DateTime? @map("revoked_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
